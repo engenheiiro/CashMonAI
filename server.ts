@@ -1,228 +1,185 @@
-import express from "express";
-import mongoose from "mongoose";
-import cors from "cors";
-import dotenv from "dotenv";
-import { createServer as createViteServer } from "vite";
-import path from "path";
-import { fileURLToPath } from "url";
+import express from 'express';
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const app = express();
-const PORT = 3000;
-
-app.use(cors());
 app.use(express.json());
 
-// MongoDB Connection
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/flow-finance";
+const PORT = process.env.SERVER_PORT || 3001;
 
-mongoose.connect(MONGODB_URI)
-  .then(() => console.log("Conectado ao MongoDB"))
-  .catch((err) => console.error("Erro ao conectar ao MongoDB:", err));
+// ─── Schemas ─────────────────────────────────────────────────────────────────
 
-// Schemas
-const TransactionSchema = new mongoose.Schema({
-  amount: Number,
+const transactionSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
   type: String,
-  categoryId: String,
+  amount: Number,
+  category: String,
+  subcategory: String,
   date: String,
-  note: String,
-  walletId: String,
-  creditCardId: String,
   status: String,
-  isFixed: Boolean,
+  description: String,
   isRecurring: Boolean,
-  installment: {
-    current: Number,
-    total: Number
-  }
+  recurringBillId: String,
 });
 
-const WalletSchema = new mongoose.Schema({
-  id: String,
-  name: String
-});
-
-const CategorySchema = new mongoose.Schema({
-  id: String,
+const recurringBillSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
   name: String,
-  color: String,
-  icon: String
-});
-
-const GoalSchema = new mongoose.Schema({
-  id: String,
-  name: String,
-  targetAmount: Number,
-  currentAmount: Number,
-  color: String,
-  deadline: String
-});
-
-const CreditCardSchema = new mongoose.Schema({
-  id: String,
-  name: String,
-  limit: Number,
-  closingDay: Number,
+  amount: Number,
+  category: String,
   dueDay: Number,
-  color: String
+  type: String,
+  status: String,
+  startDate: String,
+  endDate: String,
 });
 
-const Transaction = mongoose.model("Transaction", TransactionSchema);
-const Wallet = mongoose.model("Wallet", WalletSchema);
-const Category = mongoose.model("Category", CategorySchema);
-const Goal = mongoose.model("Goal", GoalSchema);
-const CreditCard = mongoose.model("CreditCard", CreditCardSchema);
-
-const SettingsSchema = new mongoose.Schema({
-  minimumBalance: Number,
-  budgets: Map
+const budgetSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  categoryId: String,
+  subcategory: String,
+  plannedAmount: Number,
+  month: String,
 });
 
-const Settings = mongoose.model("Settings", SettingsSchema);
-
-// API Routes
-app.get("/api/settings", async (req, res) => {
-  let settings = await Settings.findOne();
-  if (!settings) {
-    settings = new Settings({ minimumBalance: 0, budgets: {} });
-    await settings.save();
-  }
-  res.json(settings);
+const investmentSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  name: String,
+  type: String,
+  amount: Number,
+  goalAmount: Number,
+  withdrawnAmount: Number,
+  date: String,
+  icon: String,
 });
 
-app.put("/api/settings", async (req, res) => {
-  const settings = await Settings.findOneAndUpdate({}, req.body, { new: true, upsert: true });
-  res.json(settings);
-});
+const Transaction = mongoose.model('Transaction', transactionSchema);
+const RecurringBill = mongoose.model('RecurringBill', recurringBillSchema);
+const Budget = mongoose.model('Budget', budgetSchema);
+const Investment = mongoose.model('Investment', investmentSchema);
 
-app.get("/api/transactions", async (req, res) => {
-  const transactions = await Transaction.find().sort({ date: -1 });
-  res.json(transactions);
-});
-
-app.post("/api/transactions", async (req, res) => {
-  const transaction = new Transaction(req.body);
-  await transaction.save();
-  res.json(transaction);
-});
-
-app.put("/api/transactions/:id", async (req, res) => {
-  const transaction = await Transaction.findByIdAndUpdate(req.params.id, req.body, { new: true });
-  res.json(transaction);
-});
-
-app.delete("/api/transactions/:id", async (req, res) => {
-  await Transaction.findByIdAndDelete(req.params.id);
-  res.json({ success: true });
-});
-
-app.delete("/api/transactions", async (req, res) => {
-  await Transaction.deleteMany({});
-  res.json({ success: true });
-});
-
-// Wallets
-app.get("/api/wallets", async (req, res) => {
-  const wallets = await Wallet.find();
-  res.json(wallets);
-});
-
-app.post("/api/wallets", async (req, res) => {
-  const wallet = new Wallet(req.body);
-  await wallet.save();
-  res.json(wallet);
-});
-
-app.delete("/api/wallets/:id", async (req, res) => {
-  await Wallet.findOneAndDelete({ id: req.params.id });
-  res.json({ success: true });
-});
-
-// Categories
-app.get("/api/categories", async (req, res) => {
-  const categories = await Category.find();
-  res.json(categories);
-});
-
-app.post("/api/categories", async (req, res) => {
-  const category = new Category(req.body);
-  await category.save();
-  res.json(category);
-});
-
-// Goals
-app.get("/api/goals", async (req, res) => {
-  const goals = await Goal.find();
-  res.json(goals);
-});
-
-app.post("/api/goals", async (req, res) => {
-  const goal = new Goal(req.body);
-  await goal.save();
-  res.json(goal);
-});
-
-app.put("/api/goals/:id", async (req, res) => {
-  const goal = await Goal.findOneAndUpdate({ id: req.params.id }, req.body, { new: true });
-  res.json(goal);
-});
-
-app.delete("/api/goals/:id", async (req, res) => {
-  await Goal.findOneAndDelete({ id: req.params.id });
-  res.json({ success: true });
-});
-
-// Credit Cards
-app.get("/api/credit-cards", async (req, res) => {
-  const cards = await CreditCard.find();
-  res.json(cards);
-});
-
-app.post("/api/credit-cards", async (req, res) => {
-  const card = new CreditCard(req.body);
-  await card.save();
-  res.json(card);
-});
-
-app.delete("/api/credit-cards/:id", async (req, res) => {
-  await CreditCard.findOneAndDelete({ id: req.params.id });
-  res.json({ success: true });
-});
-
-// Reset All
-app.post("/api/reset", async (req, res) => {
-  await Transaction.deleteMany({});
-  await Wallet.deleteMany({});
-  await Category.deleteMany({});
-  await Goal.deleteMany({});
-  await CreditCard.deleteMany({});
-  res.json({ success: true });
-});
-
-// Vite Integration
-async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
-  }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Servidor rodando em http://localhost:${PORT}`);
-  });
+function toPlain(doc: mongoose.Document) {
+  const obj = doc.toObject() as Record<string, unknown>;
+  delete obj._id;
+  delete obj.__v;
+  return obj;
 }
 
-startServer();
+// ─── Transactions ─────────────────────────────────────────────────────────────
+
+app.get('/api/transactions', async (_req, res) => {
+  const docs = await Transaction.find();
+  res.json(docs.map(toPlain));
+});
+
+app.post('/api/transactions', async (req, res) => {
+  const doc = await Transaction.create(req.body);
+  res.json(toPlain(doc));
+});
+
+app.post('/api/transactions/batch', async (req, res) => {
+  if (!Array.isArray(req.body) || req.body.length === 0) { res.json([]); return; }
+  const docs = await Transaction.insertMany(req.body);
+  res.json(docs.map(toPlain));
+});
+
+// Must come before /:id to avoid "by-bill" matching as an id
+app.delete('/api/transactions/by-bill/:billId', async (req, res) => {
+  await Transaction.deleteMany({ recurringBillId: req.params.billId, status: 'pending' });
+  res.json({ ok: true });
+});
+
+app.put('/api/transactions/:id', async (req, res) => {
+  const doc = await Transaction.findOneAndUpdate({ id: req.params.id }, req.body, { new: true });
+  res.json(toPlain(doc!));
+});
+
+app.delete('/api/transactions/:id', async (req, res) => {
+  await Transaction.deleteOne({ id: req.params.id });
+  res.json({ ok: true });
+});
+
+// ─── Recurring Bills ──────────────────────────────────────────────────────────
+
+app.get('/api/recurring-bills', async (_req, res) => {
+  const docs = await RecurringBill.find();
+  res.json(docs.map(toPlain));
+});
+
+app.post('/api/recurring-bills', async (req, res) => {
+  const doc = await RecurringBill.create(req.body);
+  res.json(toPlain(doc));
+});
+
+app.put('/api/recurring-bills/:id', async (req, res) => {
+  const doc = await RecurringBill.findOneAndUpdate({ id: req.params.id }, req.body, { new: true });
+  res.json(toPlain(doc!));
+});
+
+app.delete('/api/recurring-bills/:id', async (req, res) => {
+  await RecurringBill.deleteOne({ id: req.params.id });
+  res.json({ ok: true });
+});
+
+// ─── Budgets ──────────────────────────────────────────────────────────────────
+
+app.get('/api/budgets', async (_req, res) => {
+  const docs = await Budget.find();
+  res.json(docs.map(toPlain));
+});
+
+app.post('/api/budgets', async (req, res) => {
+  const doc = await Budget.create(req.body);
+  res.json(toPlain(doc));
+});
+
+app.put('/api/budgets/:id', async (req, res) => {
+  const doc = await Budget.findOneAndUpdate({ id: req.params.id }, req.body, { new: true });
+  res.json(toPlain(doc!));
+});
+
+// ─── Investments ──────────────────────────────────────────────────────────────
+
+app.get('/api/investments', async (_req, res) => {
+  const docs = await Investment.find();
+  res.json(docs.map(toPlain));
+});
+
+app.post('/api/investments', async (req, res) => {
+  const doc = await Investment.create(req.body);
+  res.json(toPlain(doc));
+});
+
+app.put('/api/investments/:id', async (req, res) => {
+  const doc = await Investment.findOneAndUpdate({ id: req.params.id }, req.body, { new: true });
+  res.json(toPlain(doc!));
+});
+
+app.delete('/api/investments/:id', async (req, res) => {
+  await Investment.deleteOne({ id: req.params.id });
+  res.json({ ok: true });
+});
+
+// ─── Reset ────────────────────────────────────────────────────────────────────
+
+app.post('/api/reset', async (_req, res) => {
+  await Promise.all([
+    Transaction.deleteMany({}),
+    RecurringBill.deleteMany({}),
+    Budget.deleteMany({}),
+    Investment.deleteMany({}),
+  ]);
+  res.json({ ok: true });
+});
+
+// ─── Connect & Start ──────────────────────────────────────────────────────────
+
+mongoose.connect(process.env.MONGODB_URI!).then(() => {
+  console.log('MongoDB connected');
+  app.listen(PORT, () => console.log(`API server → http://localhost:${PORT}`));
+}).catch(err => {
+  console.error('MongoDB connection failed:', err.message);
+  process.exit(1);
+});
